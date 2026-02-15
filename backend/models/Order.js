@@ -10,7 +10,7 @@ const orderSchema = new mongoose.Schema(
     customerName: { type: String, required: true },
     items: [
       {
-        name: { type: String, required: true }, // e.g., "Pizza"
+        name: { type: String, required: true }, 
         price: { type: Number, required: true },
       },
     ],

@@ -2,10 +2,8 @@ import { useState, useEffect } from "react";
 import "./App.css";
 
 // 1. BACKEND CONNECTION
-// Ensure your backend is running on port 5000 and has the /api prefix mounted
 const API_BASE = "http://localhost:5000/api";
 
-// Helper to manage JWT Token headers for protected routes
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
   return {
@@ -16,6 +14,7 @@ const getAuthHeaders = () => {
 
 // 2. API SERVICE
 const api = {
+  // Auth
   login: (email, password) =>
     fetch(`${API_BASE}/users/login`, {
       method: "POST",
@@ -34,6 +33,7 @@ const api = {
       res.ok ? res.json() : Promise.reject("Registration failed"),
     ),
 
+  // Menu
   getMenuItems: () => fetch(`${API_BASE}/menu-items`).then((res) => res.json()),
 
   createMenuItem: (data) =>
@@ -62,16 +62,27 @@ const api = {
       res.ok ? res.json() : Promise.reject("Failed to delete item"),
     ),
 
+  // Orders
   getOrders: () =>
     fetch(`${API_BASE}/orders`, { headers: getAuthHeaders() }).then((res) =>
       res.json(),
     ),
 
-  updateOrder: (id, data) =>
+  // NEW: Create Order Function
+  createOrder: (data) =>
+    fetch(`${API_BASE}/orders`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }).then((res) =>
+      res.ok ? res.json() : Promise.reject("Failed to create order"),
+    ),
+
+  updateOrder: (id, status) =>
     fetch(`${API_BASE}/orders/${id}`, {
       method: "PUT",
       headers: getAuthHeaders(),
-      body: JSON.stringify(data),
+      body: JSON.stringify({ status }),
     }).then((res) =>
       res.ok ? res.json() : Promise.reject("Failed to update order"),
     ),
@@ -96,40 +107,49 @@ function App() {
   const [foods, setFoods] = useState([]);
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState("menu");
+
+  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isCreateOrderModalOpen, setIsCreateOrderModalOpen] = useState(false); // NEW MODAL STATE
+
   const [editingFood, setEditingFood] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Forms
   const [formData, setFormData] = useState({
     name: "",
-    category: "",
+    category: "Main Course",
     price: "",
     description: "",
     image: "",
   });
   const [orderFormData, setOrderFormData] = useState({ status: "" });
 
+  // NEW: Form for Creating Order
+  const [newOrderForm, setNewOrderForm] = useState({
+    customerName: "",
+    selectedItems: [], // Will hold objects like { name, price }
+  });
+
   const categories = [
-    "Pizza",
+    "Appetizer",
+    "Main Course",
+    "Dessert",
     "Burgers",
-    "Salads",
-    "Seafood",
-    "Desserts",
-    "Drinks",
-    "Appetizers",
+    "Beverage",
   ];
-  const orderStatuses = ["pending", "preparing", "completed", "cancelled"];
+  const orderStatuses = ["Pending", "Preparing", "Completed", "Cancelled"];
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
-        fetchInitialData();
+        setTimeout(fetchInitialData, 100);
       } catch (e) {
-        console.error("Session restore failed:", e);
         localStorage.removeItem("user");
       }
     }
@@ -147,14 +167,12 @@ function App() {
       const data = isRegistering
         ? await api.register(authForm.name, authForm.email, authForm.password)
         : await api.login(authForm.email, authForm.password);
-
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data));
       setUser(data);
       fetchInitialData();
     } catch (err) {
-      console.error("Authentication Error:", err);
-      alert(err);
+      alert("Auth Failed");
     } finally {
       setLoading(false);
     }
@@ -169,8 +187,8 @@ function App() {
     try {
       const data = await api.getMenuItems();
       setFoods(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Menu fetch failed:", err);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -178,8 +196,8 @@ function App() {
     try {
       const data = await api.getOrders();
       setOrders(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Order fetch failed:", err);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -196,11 +214,8 @@ function App() {
         setFoods([...foods, created]);
       }
       setIsModalOpen(false);
-    } catch (err) {
-      console.error("Submit Error:", err);
-      alert(
-        "Error: Ensure your backend is running and your account is an Admin.",
-      );
+    } catch (e) {
+      alert("Save Failed");
     } finally {
       setLoading(false);
     }
@@ -211,9 +226,8 @@ function App() {
       try {
         await api.deleteMenuItem(id);
         setFoods(foods.filter((f) => f._id !== id));
-      } catch (err) {
-        console.error("Delete failed:", err);
-        alert("Delete failed.");
+      } catch (e) {
+        alert("Delete failed");
       }
     }
   };
@@ -221,35 +235,78 @@ function App() {
   const handleOrderUpdate = async (e) => {
     e.preventDefault();
     try {
-      const updated = await api.updateOrder(editingOrder._id, {
-        status: orderFormData.status,
-      });
+      const updated = await api.updateOrder(
+        editingOrder._id,
+        orderFormData.status,
+      );
       setOrders(orders.map((o) => (o._id === editingOrder._id ? updated : o)));
       setIsOrderModalOpen(false);
-    } catch (err) {
-      console.error("Order update failed:", err);
-      alert("Update failed.");
+    } catch (e) {
+      alert("Update failed");
     }
   };
 
   const handleOrderDelete = async (id) => {
-    if (window.confirm("Delete this order record?")) {
+    if (window.confirm("Delete order?")) {
       try {
         await api.deleteOrder(id);
         setOrders(orders.filter((o) => o._id !== id));
-      } catch (err) {
-        console.error("Order delete failed:", err);
-        alert("Delete failed.");
+      } catch (e) {
+        alert("Delete failed");
       }
     }
   };
 
-  // SAFETY FILTERS: Optional Chaining (?.) prevents crashes if data is missing or corrupted
-  const filteredFoods = foods.filter((f) =>
+  // --- NEW: CREATE ORDER LOGIC ---
+
+  // Add item to the "cart" in the modal
+  const addItemToNewOrder = (foodItem) => {
+    setNewOrderForm({
+      ...newOrderForm,
+      selectedItems: [
+        ...newOrderForm.selectedItems,
+        { name: foodItem.name, price: foodItem.price },
+      ],
+    });
+  };
+
+  // Submit the new order to backend
+  const handleSubmitNewOrder = async (e) => {
+    e.preventDefault();
+    if (newOrderForm.selectedItems.length === 0) {
+      alert("Please select at least one item.");
+      return;
+    }
+
+    const total = newOrderForm.selectedItems.reduce(
+      (sum, item) => sum + item.price,
+      0,
+    );
+    const payload = {
+      customerName: newOrderForm.customerName,
+      items: newOrderForm.selectedItems,
+      total: total,
+    };
+
+    setLoading(true);
+    try {
+      const created = await api.createOrder(payload);
+      setOrders([created, ...orders]); // Add to top of list
+      setIsCreateOrderModalOpen(false);
+      setNewOrderForm({ customerName: "", selectedItems: [] }); // Reset form
+    } catch (e) {
+      console.error(e);
+      alert("Failed to create order. Check console.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filters
+  const filteredFoods = (foods || []).filter((f) =>
     f.name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
-
-  const filteredOrders = orders.filter((o) =>
+  const filteredOrders = (orders || []).filter((o) =>
     o.customerName?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
@@ -289,16 +346,14 @@ function App() {
               required
             />
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? "Please wait..." : isRegistering ? "Sign Up" : "Login"}
+              {loading ? "Wait..." : isRegistering ? "Sign Up" : "Login"}
             </button>
           </form>
           <p
             style={{ cursor: "pointer", color: "#2563eb", marginTop: "10px" }}
             onClick={() => setIsRegistering(!isRegistering)}
           >
-            {isRegistering
-              ? "Already have an account? Login here"
-              : "Don't have an account? Register here"}
+            {isRegistering ? "Back to Login" : "Register here"}
           </p>
         </div>
       </div>
@@ -343,7 +398,7 @@ function App() {
                 setEditingFood(null);
                 setFormData({
                   name: "",
-                  category: "",
+                  category: "Main Course",
                   price: "",
                   description: "",
                   image: "",
@@ -352,6 +407,18 @@ function App() {
               }}
             >
               + Add New Item
+            </button>
+          )}
+          {/* NEW BUTTON FOR ORDERS */}
+          {activeTab === "orders" && (
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setNewOrderForm({ customerName: "", selectedItems: [] });
+                setIsCreateOrderModalOpen(true);
+              }}
+            >
+              + Add New Order
             </button>
           )}
         </header>
@@ -379,18 +446,13 @@ function App() {
                 <div className="food-details">
                   <h3>{food.name}</h3>
                   <p className="food-category">{food.category}</p>
-                  <p className="food-price">
-                    ${Number(food.price || 0).toFixed(2)}
-                  </p>
+                  <p className="food-price">${Number(food.price).toFixed(2)}</p>
                 </div>
                 <div className="food-actions">
                   <button
                     onClick={() => {
                       setEditingFood(food);
-                      setFormData({
-                        ...food,
-                        price: (food.price || 0).toString(),
-                      });
+                      setFormData({ ...food, price: food.price.toString() });
                       setIsModalOpen(true);
                     }}
                   >
@@ -400,7 +462,7 @@ function App() {
                     onClick={() => handleDeleteMenu(food._id)}
                     className="btn-delete-small"
                   >
-                    🗑️ Delete
+                    🗑️
                   </button>
                 </div>
               </div>
@@ -428,9 +490,11 @@ function App() {
                       {order.items?.map((item) => item.name).join(", ") ||
                         "No items"}
                     </td>
-                    <td>${Number(order.total || 0).toFixed(2)}</td>
+                    <td>${Number(order.total).toFixed(2)}</td>
                     <td>
-                      <span className={`status-badge ${order.status}`}>
+                      <span
+                        className={`status-badge ${order.status.toLowerCase()}`}
+                      >
                         {order.status}
                       </span>
                     </td>
@@ -459,7 +523,7 @@ function App() {
         )}
       </main>
 
-      {/* --- MODALS --- */}
+      {/* --- MENU MODAL --- */}
       {isModalOpen && (
         <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -481,7 +545,6 @@ function App() {
                 }
                 required
               >
-                <option value="">Select Category</option>
                 {categories.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -525,13 +588,14 @@ function App() {
         </div>
       )}
 
+      {/* --- ORDER STATUS MODAL --- */}
       {isOrderModalOpen && (
         <div
           className="modal-overlay"
           onClick={() => setIsOrderModalOpen(false)}
         >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Update Order Status</h2>
+            <h2>Update Status</h2>
             <form onSubmit={handleOrderUpdate}>
               <select
                 value={orderFormData.status}
@@ -539,7 +603,7 @@ function App() {
               >
                 {orderStatuses.map((s) => (
                   <option key={s} value={s}>
-                    {s.toUpperCase()}
+                    {s}
                   </option>
                 ))}
               </select>
@@ -551,7 +615,118 @@ function App() {
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary">
-                  Update Status
+                  Update
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- NEW: CREATE ORDER MODAL --- */}
+      {isCreateOrderModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setIsCreateOrderModalOpen(false)}
+        >
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Create New Order</h2>
+            <form onSubmit={handleSubmitNewOrder}>
+              <input
+                type="text"
+                placeholder="Customer Name"
+                value={newOrderForm.customerName}
+                onChange={(e) =>
+                  setNewOrderForm({
+                    ...newOrderForm,
+                    customerName: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <div
+                style={{
+                  margin: "15px 0",
+                  border: "1px solid #ddd",
+                  padding: "10px",
+                  borderRadius: "8px",
+                }}
+              >
+                <h4>Select Items:</h4>
+                <div
+                  style={{
+                    maxHeight: "150px",
+                    overflowY: "auto",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "5px",
+                  }}
+                >
+                  {foods.map((food) => (
+                    <button
+                      key={food._id}
+                      type="button"
+                      onClick={() => addItemToNewOrder(food)}
+                      style={{
+                        textAlign: "left",
+                        fontSize: "0.85rem",
+                        padding: "5px",
+                        background: "#f8f9fa",
+                        border: "1px solid #eee",
+                      }}
+                    >
+                      + {food.name} (${food.price})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: "#e9f5ea",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  marginBottom: "10px",
+                }}
+              >
+                <strong>Order Summary:</strong>
+                <ul
+                  style={{
+                    margin: "5px 0",
+                    paddingLeft: "20px",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {newOrderForm.selectedItems.map((item, idx) => (
+                    <li key={idx}>
+                      {item.name} - ${item.price}
+                    </li>
+                  ))}
+                </ul>
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontWeight: "bold",
+                    marginTop: "5px",
+                  }}
+                >
+                  Total: $
+                  {newOrderForm.selectedItems
+                    .reduce((sum, item) => sum + item.price, 0)
+                    .toFixed(2)}
+                </div>
+              </div>
+
+              <div className="modal-btns">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOrderModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Submit Order
                 </button>
               </div>
             </form>

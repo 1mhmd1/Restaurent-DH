@@ -1,7 +1,6 @@
 const MenuItem = require("../models/MenuItem");
 
-// 1. ADD NEW ITEM
-// @route   POST /api/menu-items
+//    POST /api/menu-items
 exports.addMenuItem = async (req, res) => {
   try {
     const newItem = await MenuItem.create(req.body);
@@ -11,8 +10,7 @@ exports.addMenuItem = async (req, res) => {
   }
 };
 
-// 2. GET ALL ITEMS
-// @route   GET /api/menu-items
+//   GET /api/menu-items
 exports.getMenuItems = async (req, res) => {
   try {
     const items = await MenuItem.find();
@@ -22,8 +20,7 @@ exports.getMenuItems = async (req, res) => {
   }
 };
 
-// 3. GET SINGLE ITEM
-// @route   GET /api/menu-items/:id
+//    GET /api/menu-items/:id
 exports.getMenuItemById = async (req, res) => {
   try {
     const item = await MenuItem.findById(req.params.id);
@@ -38,14 +35,13 @@ exports.getMenuItemById = async (req, res) => {
   }
 };
 
-// 4. UPDATE ITEM
-// @route   PUT /api/menu-items/:id
+//    PUT /api/menu-items/:id
 exports.updateMenuItem = async (req, res) => {
   try {
     const updatedItem = await MenuItem.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }, // "new: true" returns the updated item
+      { new: true, runValidators: true },
     );
 
     if (!updatedItem) {
@@ -58,8 +54,7 @@ exports.updateMenuItem = async (req, res) => {
   }
 };
 
-// 5. DELETE ITEM
-// @route   DELETE /api/menu-items/:id
+//  DELETE /api/menu-items/:id
 exports.deleteMenuItem = async (req, res) => {
   try {
     const deletedItem = await MenuItem.findByIdAndDelete(req.params.id);
